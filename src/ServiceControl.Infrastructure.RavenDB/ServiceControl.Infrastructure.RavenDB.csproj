@@ -13,8 +13,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="RavenDB.Client" Version="5.1.0" />
-    <PackageReference Include="RavenDB.Embedded" Version="5.1.0" />
+    <PackageReference Include="RavenDB.Client" Version="5.3.100" />
+    <PackageReference Include="RavenDB.Embedded" Version="5.3.100" />
     <PackageReference Include="Particular.CodeRules" Version="0.7.0" PrivateAssets="All" />
     <PackageReference Include="NServiceBus" Version="7.4.4" />
   </ItemGroup>
@@ -26,19 +26,14 @@
       <RavenDownloadUrl>https://hibernatingrhinos.com/downloads/RavenDB%20for%20Windows%20x64/latest</RavenDownloadUrl>
     </PropertyGroup>
 
-    <Message Text="Downloading RavenDB package" Importance="high"/>
-    <DownloadFile
-      SourceUrl="$(RavenDownloadUrl)"
-      DestinationFolder="$(DownloadCacheFolder)"
-      SkipUnchangedFiles="true">
+    <Message Text="Downloading RavenDB package" Importance="high" />
+    <DownloadFile SourceUrl="$(RavenDownloadUrl)" DestinationFolder="$(DownloadCacheFolder)" SkipUnchangedFiles="true">
       <Output TaskParameter="DownloadedFile" PropertyName="RavenZip" />
     </DownloadFile>
 
     <RemoveDir Directories="$(UnzipFolder)" />
     <MakeDir Directories="$(UnzipFolder)" />
-    <Unzip ContinueOnError="true"
-           SourceFiles="$(RavenZip)"
-           DestinationFolder="$(UnzipFolder)" />
+    <Unzip ContinueOnError="true" SourceFiles="$(RavenZip)" DestinationFolder="$(UnzipFolder)" />
   </Target>
   
 </Project>

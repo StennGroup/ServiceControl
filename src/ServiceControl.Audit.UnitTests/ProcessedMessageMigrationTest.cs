@@ -80,7 +80,7 @@ namespace ServiceControl.Audit.UnitTests
                 using (var session = store.OpenSession())
                 {
                     await session.Advanced.RequestExecutor.ExecuteAsync(
-                        new PutDocumentCommand("SomeId", null, ParseJson(session.Advanced.Context, oldDocumentJson)),
+                        new PutDocumentCommand("SomeId", null, await ParseJson(session.Advanced.Context, oldDocumentJson)),
                         session.Advanced.Context);
 
                     session.SaveChanges();
@@ -94,11 +94,11 @@ namespace ServiceControl.Audit.UnitTests
             }
         }
 
-        public BlittableJsonReaderObject ParseJson(JsonOperationContext context, string json)
+        public async Task<BlittableJsonReaderObject> ParseJson(JsonOperationContext context, string json)
         {
             using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
             {
-                return context.ReadForMemory(stream, "SomeId");
+                return await context.ReadForMemoryAsync(stream, "SomeId");
             }
         }
 
