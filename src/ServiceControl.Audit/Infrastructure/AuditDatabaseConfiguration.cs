@@ -15,9 +15,9 @@ namespace ServiceControl.Audit.Infrastructure
             typeof(SagaInfo).Assembly
         };
 
-        public override IEnumerable<string> CollectionsToCompress { get; } = new[]
-        {
-            "ProcessedMessages"
-        };
+        // public override IEnumerable<string> CollectionsToCompress { get; } = new[]
+        // {
+        //     "ProcessedMessages"
+        // };
     }
 }
