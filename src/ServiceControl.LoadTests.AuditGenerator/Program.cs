@@ -22,12 +22,13 @@ namespace ServiceControl.LoadTests.AuditGenerator
         static readonly string QueueLengthProviderMsmqTransportCustomizationName = typeof(MsmqTransportCustomizationWithQueueLengthProvider).AssemblyQualifiedName;
 
         const string DefaultDestination = "audit";
+        private const int MessageTypeNameAndValueLength = 20;
         static readonly string HostId = Guid.NewGuid().ToString();
         static readonly ConcurrentDictionary<string, int> QueueLengths = new ConcurrentDictionary<string, int>();
         static int bodySize;
         static Counter counter;
         static MetricsReporter reporter;
-        static int numberOfLayouts = 100;
+        static int numberOfLayouts = 200;
         static int numberOfEndpoints = 40;
 
         static readonly string MessageBaseLayout =
@@ -118,7 +119,8 @@ namespace ServiceControl.LoadTests.AuditGenerator
             var random = new Random();
             for (var i = 0; i < numberOfLayouts; i++)
             {
-                var messageTypeName = RandomString(20, random).FirstCharToUpper();
+                var messageTypeName = RandomString(MessageTypeNameAndValueLength, random).FirstCharToUpper();
+                var messageTypeNameLength = Encoding.UTF8.GetBytes(messageTypeName).Length;
                 var layoutBuilder = new StringBuilder();
                 layoutBuilder.AppendLine();
                 var propertyPositionPlaceHolder = 0;
@@ -132,7 +134,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
                     var intermediateLayout = MessageBaseLayout.Replace("__MESSAGETYPENAME__", messageTypeName)
                         .Replace("__CONTENT__", layoutBuilder.ToString());
                     // saving 20 chars per property
-                    if ((Encoding.UTF8.GetBytes(intermediateLayout).Length + (i * 20 * sizeof(char))) >= bodySize)
+                    if ((Encoding.UTF8.GetBytes(intermediateLayout).Length + (i * messageTypeNameLength)) >= bodySize)
                     {
                         MessageBaseLayouts.Add((intermediateLayout, propertyPositionPlaceHolder));
                         break;
@@ -194,7 +196,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
                 var propertyValues = new List<object>(numberOfProperties);
                 for (var i = 0; i < numberOfProperties; i++)
                 {
-                    propertyValues.Add(RandomString(20, random));
+                    propertyValues.Add(RandomString(MessageTypeNameAndValueLength, random));
                 }
 
                 var transportOperation = new TransportOperation(
