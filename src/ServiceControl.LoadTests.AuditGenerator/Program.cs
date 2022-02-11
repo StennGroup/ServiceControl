@@ -1,6 +1,11 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using NServiceBus.Extensibility;
+using NServiceBus.Features;
+using NServiceBus.Routing;
+using NServiceBus.Transport;
 using ServiceControl.Infrastructure;
 
 namespace ServiceControl.LoadTests.AuditGenerator
@@ -23,6 +28,17 @@ namespace ServiceControl.LoadTests.AuditGenerator
         static int bodySize;
         static Counter counter;
         static MetricsReporter reporter;
+        static int numberOfLayouts = 100;
+        // static int numberOfEndpoints = 40;
+
+        private static string MessageBaseLayout =
+            @"<__MESSAGETYPENAME__ xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema"" xmlns=""http://tempuri.net/NServiceBus.Serializers.XML.Test"">__CONTENT__</__MESSAGETYPENAME__>";
+
+        private static List<(string layout, int numberOfProperties)> MessageBaseLayouts = new List<(string layout, int numberOfProperties)>();
+
+        public static IDispatchMessages Dispatcher { get; set; }
+        
+        private 
 
         static async Task Main(string[] commandLineArgs)
         {
@@ -38,10 +54,15 @@ namespace ServiceControl.LoadTests.AuditGenerator
             queueLengthProvider.Initialize(connectionString, CacheQueueLength);
 
             var configuration = new EndpointConfiguration("AuditGenerator");
+            configuration.EnableFeature<MyDispatchHackFeature>();
             configuration.SendOnly();
             configuration.UseTransport<MsmqTransport>();
             configuration.UsePersistence<InMemoryPersistence>();
+            var serialization = configuration.UseSerialization<XmlSerializer>();
+            serialization.DontWrapRawXml();
             configuration.EnableInstallers();
+
+            GenerateLayouts();
 
             var metrics = new Metrics();
             reporter = new MetricsReporter(metrics, Console.WriteLine, TimeSpan.FromSeconds(2));
@@ -52,13 +73,13 @@ namespace ServiceControl.LoadTests.AuditGenerator
             var commands = new (string, Func<CancellationToken, string[], Task>)[]
             {
                 ("f|Fill the sender queue. Syntax: f <number of messages> <number of tasks> <destination>",
-                    (ct, args) => Fill(args, endpoint)),
+                    (ct, args) => Fill(args, Dispatcher)),
                 ("s|Start sending messages to the queue. Syntax: s <number of tasks> <destination>",
-                    (ct, args) => FullSpeedSend(args, ct, endpoint)),
+                    (ct, args) => FullSpeedSend(args, ct, Dispatcher)),
                 ("t|Throttled sending that keeps the receiver queue size at n. Syntax: t <number of msgs> <destination>",
-                    (ct, args) => ConstantQueueLengthSend(args, ct, endpoint, queueLengthProvider)),
+                    (ct, args) => ConstantQueueLengthSend(args, ct, Dispatcher, queueLengthProvider)),
                 ("c|Constant-throughput sending. Syntax: c <number of msgs per second> <destination>",
-                    (ct, args) => ConstantThroughputSend(args, ct, endpoint))
+                    (ct, args) => ConstantThroughputSend(args, ct, Dispatcher))
             };
 
             await queueLengthProvider.Start();
@@ -67,6 +88,67 @@ namespace ServiceControl.LoadTests.AuditGenerator
 
             await queueLengthProvider.Stop();
         }
+        
+        class MyDispatchHackFeature : Feature
+        {
+            protected override void Setup(FeatureConfigurationContext context)
+            {
+                context.Container.ConfigureComponent<DispatcherHackStartupTask>(DependencyLifecycle.SingleInstance);
+                context.RegisterStartupTask(b => b.Build<DispatcherHackStartupTask>());
+            }
+            
+            class DispatcherHackStartupTask : FeatureStartupTask
+            {
+                public DispatcherHackStartupTask(IDispatchMessages dispatchMessages)
+                {
+                    Dispatcher = dispatchMessages;
+                }
+                
+                protected override Task OnStart(IMessageSession session)
+                {
+                    return Task.CompletedTask;
+                }
+
+                protected override Task OnStop(IMessageSession session)
+                {
+                    return Task.CompletedTask;
+                }
+            }
+        }
+
+        private static void GenerateLayouts()
+        {
+            var random = new Random();
+            for (var i = 0; i < numberOfLayouts; i++)
+            {
+                var messageTypeName = RandomString(20, random).FirstCharToUpper();
+                var layoutBuilder = new StringBuilder();
+                layoutBuilder.AppendLine();
+                var propertyPositionPlaceHolder = 0;
+                for (var j = 1; j < bodySize; j++)
+                {
+                    var propertyName = RandomString(random.Next(10, 30), random).FirstCharToUpper();
+                    layoutBuilder.AppendLine(
+                        $"   <{propertyName}>{{{propertyPositionPlaceHolder}}}</{propertyName}>");
+                    propertyPositionPlaceHolder++;
+
+                    var intermediateLayout = MessageBaseLayout.Replace("__MESSAGETYPENAME__", messageTypeName)
+                        .Replace("__CONTENT__", layoutBuilder.ToString());
+                    // saving 20 chars per property
+                    if ((Encoding.UTF8.GetBytes(intermediateLayout).Length + (i * 20 * sizeof(char))) >= bodySize)
+                    {
+                        MessageBaseLayouts.Add((intermediateLayout, propertyPositionPlaceHolder));
+                        break;
+                    }
+                }
+            }
+        }
+        
+        public static string RandomString(int length, Random random)
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            return new string(Enumerable.Range(1, length).Select(_ => chars[random.Next(chars.Length)]).ToArray());
+        }
 
         static void CacheQueueLength(QueueLengthEntry[] values, EndpointToQueueMapping queueAndEndpointName)
         {
@@ -74,7 +156,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
             QueueLengths.AddOrUpdate(queueAndEndpointName.InputQueue, newValue, (queue, oldValue) => newValue);
         }
 
-        static async Task Fill(string[] args, IEndpointInstance endpoint)
+        static async Task Fill(string[] args, IDispatchMessages dispatchMessages)
         {
             var totalMessages = args.Length > 0 ? int.Parse(args[0]) : 1000;
             var numberOfTasks = args.Length > 1 ? int.Parse(args[1]) : 5;
@@ -85,38 +167,50 @@ namespace ServiceControl.LoadTests.AuditGenerator
                 var random = new Random(Environment.TickCount + taskId);
                 for (var i = 0; i < totalMessages / numberOfTasks; i++)
                 {
-                    await SendAuditMessage(endpoint, destination, random).ConfigureAwait(false);
+                    await SendAuditMessage(dispatchMessages, destination, random).ConfigureAwait(false);
                 }
             }).ToArray();
 
             await Task.WhenAll(tasks);
         }
 
-        static Task SendAuditMessage(IMessageSession endpoint, string destination, Random random)
+        static Task SendAuditMessage(IDispatchMessages dispatcher, string destination, Random random)
         {
-            var ops = new SendOptions();
+            var headers = new Dictionary<string, string>
+            {
+                [Headers.ContentType] = "application/xml",
+                [Headers.HostId] = HostId,
+                [Headers.HostDisplayName] = "Load Generator"
+            };
 
-            ops.SetHeader(Headers.HostId, HostId);
-            ops.SetHeader(Headers.HostDisplayName, "Load Generator");
+            // ops.SetHeader(Headers.ProcessingMachine, RuntimeEnvironment.MachineName);
+            // ops.SetHeader(Headers.ProcessingEndpoint, "LoadGenerator");
+            //
+            // var now = DateTime.UtcNow;
+            // ops.SetHeader(Headers.ProcessingStarted, DateTimeExtensions.ToWireFormattedString(now));
+            // ops.SetHeader(Headers.ProcessingEnded, DateTimeExtensions.ToWireFormattedString(now));
+            //
+            // ops.SetDestination(destination);
+            
+            var layoutIndex = random.Next(0, numberOfLayouts);
+            var (layout, numberOfProperties) = MessageBaseLayouts[layoutIndex];
+            var propertyValues = new List<object>(numberOfProperties);
+            for (var i = 0; i < numberOfProperties; i++)
+            {
+                propertyValues.Add(RandomString(20, random));
+            }
 
-            ops.SetHeader(Headers.ProcessingMachine, RuntimeEnvironment.MachineName);
-            ops.SetHeader(Headers.ProcessingEndpoint, "LoadGenerator");
+            var auditMessage = new OutgoingMessage(Guid.NewGuid().ToString(), headers,
+                Encoding.UTF8.GetBytes(string.Format(layout, propertyValues.ToArray())));
 
-            var now = DateTime.UtcNow;
-            ops.SetHeader(Headers.ProcessingStarted, DateTimeExtensions.ToWireFormattedString(now));
-            ops.SetHeader(Headers.ProcessingEnded, DateTimeExtensions.ToWireFormattedString(now));
-
-            ops.SetDestination(destination);
-
-            var auditMessage = new AuditMessage();
-            auditMessage.Data = new byte[bodySize];
-            random.NextBytes(auditMessage.Data);
+            var transportOperation = new TransportOperation(auditMessage, new UnicastAddressTag(destination),
+                DispatchConsistency.Isolated);
 
             counter.Mark();
-            return endpoint.Send(auditMessage, ops);
+            return dispatcher.Dispatch(new TransportOperations(transportOperation), new TransportTransaction(), new ContextBag());
         }
 
-        static async Task FullSpeedSend(string[] args, CancellationToken ct, IEndpointInstance endpoint)
+        static async Task FullSpeedSend(string[] args, CancellationToken ct, IDispatchMessages dispatcher)
         {
             var numberOfTasks = args.Length > 0 ? int.Parse(args[0]) : 5;
             var destination = args.Length > 1 ? args[1] : DefaultDestination;
@@ -126,14 +220,14 @@ namespace ServiceControl.LoadTests.AuditGenerator
                 var random = new Random(Environment.TickCount + taskId);
                 while (ct.IsCancellationRequested == false)
                 {
-                    await SendAuditMessage(endpoint, destination, random).ConfigureAwait(false);
+                    await SendAuditMessage(dispatcher, destination, random).ConfigureAwait(false);
                 }
             }).ToArray();
 
             await Task.WhenAll(tasks);
         }
 
-        static async Task ConstantQueueLengthSend(string[] args, CancellationToken ct, IEndpointInstance endpoint, IProvideQueueLength queueLengthProvider)
+        static async Task ConstantQueueLengthSend(string[] args, CancellationToken ct, IDispatchMessages dispatcher, IProvideQueueLength queueLengthProvider)
         {
             var maxSenderCount = 20;
             var taskBarriers = new int[maxSenderCount];
@@ -197,7 +291,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
 
                         if (allowed == 1)
                         {
-                            await SendAuditMessage(endpoint, destination, random).ConfigureAwait(false);
+                            await SendAuditMessage(dispatcher, destination, random).ConfigureAwait(false);
                         }
                         else
                         {
@@ -217,7 +311,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
             await Task.WhenAll(new List<Task>(senders) { monitor });
         }
 
-        static async Task ConstantThroughputSend(string[] args, CancellationToken ct, IEndpointInstance endpoint)
+        static async Task ConstantThroughputSend(string[] args, CancellationToken ct, IDispatchMessages dispatcher)
         {
             var maxSenderCount = 20;
 
@@ -270,7 +364,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
                     try
                     {
                         await semaphore.WaitAsync(ct).ConfigureAwait(false);
-                        await SendAuditMessage(endpoint, destination, random).ConfigureAwait(false);
+                        await SendAuditMessage(dispatcher, destination, random).ConfigureAwait(false);
                     }
                     catch
                     {
@@ -338,4 +432,66 @@ namespace ServiceControl.LoadTests.AuditGenerator
             }
         }
     }
+    
+    public static class StringExtensions
+    {
+        public static string FirstCharToUpper(this string input) =>
+            input switch
+            {
+                null => throw new ArgumentNullException(nameof(input)),
+                "" => throw new ArgumentException($"{nameof(input)} cannot be empty", nameof(input)),
+                _ => $"{input[0].ToString().ToUpper()}{input.Substring(1)}"
+            };
+    }
+    
+    public static class ThreadLocalRandom
+    {
+        private static readonly Random globalRandom = new Random();
+        private static readonly object globalLock = new object();
+
+        /// <summary>
+        /// Random number generator
+        /// </summary>
+        private static readonly ThreadLocal<Random> threadRandom = new ThreadLocal<Random>(NewRandom);
+
+        public static Random NewRandom()
+        {
+            lock (globalLock)
+            {
+                return new Random(globalRandom.Next());
+            }
+        }
+
+        public static Random Instance { get { return threadRandom.Value; } }
+
+        /// <summary>See <see cref="Random.Next()" /></summary>
+        public static int Next()
+        {
+            return Instance.Next();
+        }
+
+        /// <summary>See <see cref="Random.Next(int)" /></summary>
+        public static int Next(int maxValue)
+        {
+            return Instance.Next(maxValue);
+        }
+
+        /// <summary>See <see cref="Random.Next(int, int)" /></summary>
+        public static int Next(int minValue, int maxValue)
+        {
+            return Instance.Next(minValue, maxValue);
+        }
+
+        /// <summary>See <see cref="Random.NextDouble()" /></summary>
+        public static double NextDouble()
+        {
+            return Instance.NextDouble();
+        }
+
+        /// <summary>See <see cref="Random.NextBytes(byte[])" /></summary>
+        public static void NextBytes(byte[] buffer)
+        {
+            Instance.NextBytes(buffer);
+        }
+    } 
 }
