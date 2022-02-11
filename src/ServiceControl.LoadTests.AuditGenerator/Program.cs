@@ -15,7 +15,6 @@ namespace ServiceControl.LoadTests.AuditGenerator
     using System.Threading.Tasks;
     using NServiceBus;
     using NServiceBus.Support;
-    using Messages;
     using Transports;
 
     class Program
@@ -29,12 +28,12 @@ namespace ServiceControl.LoadTests.AuditGenerator
         static Counter counter;
         static MetricsReporter reporter;
         static int numberOfLayouts = 100;
-        // static int numberOfEndpoints = 40;
+        static int numberOfEndpoints = 40;
 
-        private static string MessageBaseLayout =
+        static readonly string MessageBaseLayout =
             @"<__MESSAGETYPENAME__ xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema"" xmlns=""http://tempuri.net/NServiceBus.Serializers.XML.Test"">__CONTENT__</__MESSAGETYPENAME__>";
 
-        private static List<(string layout, int numberOfProperties)> MessageBaseLayouts = new List<(string layout, int numberOfProperties)>();
+        static readonly List<(string layout, int numberOfProperties)> MessageBaseLayouts = new List<(string layout, int numberOfProperties)>();
 
         public static IDispatchMessages Dispatcher { get; set; }
         
@@ -58,8 +57,6 @@ namespace ServiceControl.LoadTests.AuditGenerator
             configuration.SendOnly();
             configuration.UseTransport<MsmqTransport>();
             configuration.UsePersistence<InMemoryPersistence>();
-            var serialization = configuration.UseSerialization<XmlSerializer>();
-            serialization.DontWrapRawXml();
             configuration.EnableInstallers();
 
             GenerateLayouts();
@@ -176,38 +173,39 @@ namespace ServiceControl.LoadTests.AuditGenerator
 
         static Task SendAuditMessage(IDispatchMessages dispatcher, string destination, Random random)
         {
-            var headers = new Dictionary<string, string>
+            // because MSMQ is essentially synchronous
+            return Task.Run(() =>
             {
-                [Headers.ContentType] = "application/xml",
-                [Headers.HostId] = HostId,
-                [Headers.HostDisplayName] = "Load Generator"
-            };
+                var now = DateTime.UtcNow;
 
-            // ops.SetHeader(Headers.ProcessingMachine, RuntimeEnvironment.MachineName);
-            // ops.SetHeader(Headers.ProcessingEndpoint, "LoadGenerator");
-            //
-            // var now = DateTime.UtcNow;
-            // ops.SetHeader(Headers.ProcessingStarted, DateTimeExtensions.ToWireFormattedString(now));
-            // ops.SetHeader(Headers.ProcessingEnded, DateTimeExtensions.ToWireFormattedString(now));
-            //
-            // ops.SetDestination(destination);
-            
-            var layoutIndex = random.Next(0, numberOfLayouts);
-            var (layout, numberOfProperties) = MessageBaseLayouts[layoutIndex];
-            var propertyValues = new List<object>(numberOfProperties);
-            for (var i = 0; i < numberOfProperties; i++)
-            {
-                propertyValues.Add(RandomString(20, random));
-            }
+                var headers = new Dictionary<string, string>
+                {
+                    [Headers.ContentType] = "application/xml",
+                    [Headers.HostId] = HostId,
+                    [Headers.HostDisplayName] = "Load Generator",
+                    [Headers.ProcessingMachine] = RuntimeEnvironment.MachineName,
+                    [Headers.ProcessingEndpoint] = $"LoadGenerator{random.Next(1, numberOfEndpoints)}",
+                    [Headers.ProcessingStarted] = DateTimeExtensions.ToWireFormattedString(now),
+                    [Headers.ProcessingEnded] = DateTimeExtensions.ToWireFormattedString(now.AddMilliseconds(random.Next(10, 100))),
+                };
 
-            var auditMessage = new OutgoingMessage(Guid.NewGuid().ToString(), headers,
-                Encoding.UTF8.GetBytes(string.Format(layout, propertyValues.ToArray())));
+                var layoutIndex = random.Next(0, numberOfLayouts);
+                var (layout, numberOfProperties) = MessageBaseLayouts[layoutIndex];
+                var propertyValues = new List<object>(numberOfProperties);
+                for (var i = 0; i < numberOfProperties; i++)
+                {
+                    propertyValues.Add(RandomString(20, random));
+                }
 
-            var transportOperation = new TransportOperation(auditMessage, new UnicastAddressTag(destination),
-                DispatchConsistency.Isolated);
+                var transportOperation = new TransportOperation(
+                    new OutgoingMessage(Guid.NewGuid().ToString(), headers,
+                        Encoding.UTF8.GetBytes(string.Format(layout, propertyValues.ToArray()))),
+                    new UnicastAddressTag(destination), DispatchConsistency.Isolated);
 
-            counter.Mark();
-            return dispatcher.Dispatch(new TransportOperations(transportOperation), new TransportTransaction(), new ContextBag());
+                counter.Mark();
+                return dispatcher.Dispatch(new TransportOperations(transportOperation), new TransportTransaction(),
+                    new ContextBag());
+            });
         }
 
         static async Task FullSpeedSend(string[] args, CancellationToken ct, IDispatchMessages dispatcher)
@@ -419,7 +417,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
                                 break;
                             }
 
-                            await Task.Delay(TimeSpan.FromMilliseconds(500));
+                            await Task.Delay(TimeSpan.FromMilliseconds(500), ctSource.Token);
                         }
 
                         await task;
@@ -432,66 +430,4 @@ namespace ServiceControl.LoadTests.AuditGenerator
             }
         }
     }
-    
-    public static class StringExtensions
-    {
-        public static string FirstCharToUpper(this string input) =>
-            input switch
-            {
-                null => throw new ArgumentNullException(nameof(input)),
-                "" => throw new ArgumentException($"{nameof(input)} cannot be empty", nameof(input)),
-                _ => $"{input[0].ToString().ToUpper()}{input.Substring(1)}"
-            };
-    }
-    
-    public static class ThreadLocalRandom
-    {
-        private static readonly Random globalRandom = new Random();
-        private static readonly object globalLock = new object();
-
-        /// <summary>
-        /// Random number generator
-        /// </summary>
-        private static readonly ThreadLocal<Random> threadRandom = new ThreadLocal<Random>(NewRandom);
-
-        public static Random NewRandom()
-        {
-            lock (globalLock)
-            {
-                return new Random(globalRandom.Next());
-            }
-        }
-
-        public static Random Instance { get { return threadRandom.Value; } }
-
-        /// <summary>See <see cref="Random.Next()" /></summary>
-        public static int Next()
-        {
-            return Instance.Next();
-        }
-
-        /// <summary>See <see cref="Random.Next(int)" /></summary>
-        public static int Next(int maxValue)
-        {
-            return Instance.Next(maxValue);
-        }
-
-        /// <summary>See <see cref="Random.Next(int, int)" /></summary>
-        public static int Next(int minValue, int maxValue)
-        {
-            return Instance.Next(minValue, maxValue);
-        }
-
-        /// <summary>See <see cref="Random.NextDouble()" /></summary>
-        public static double NextDouble()
-        {
-            return Instance.NextDouble();
-        }
-
-        /// <summary>See <see cref="Random.NextBytes(byte[])" /></summary>
-        public static void NextBytes(byte[] buffer)
-        {
-            Instance.NextBytes(buffer);
-        }
-    } 
 }
