@@ -6,6 +6,8 @@ using NServiceBus.Extensibility;
 using NServiceBus.Features;
 using NServiceBus.Routing;
 using NServiceBus.Transport;
+using Polly;
+using Polly.RateLimit;
 using ServiceControl.Infrastructure;
 
 namespace ServiceControl.LoadTests.AuditGenerator
@@ -176,7 +178,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
         static Task SendAuditMessage(IDispatchMessages dispatcher, string destination, Random random)
         {
             // because MSMQ is essentially synchronous
-            return Task.Run(() =>
+            return Task.Run(async () =>
             {
                 var now = DateTime.UtcNow;
 
@@ -204,9 +206,8 @@ namespace ServiceControl.LoadTests.AuditGenerator
                         Encoding.UTF8.GetBytes(string.Format(layout, propertyValues.ToArray()))),
                     new UnicastAddressTag(destination), DispatchConsistency.Isolated);
 
+                await dispatcher.Dispatch(new TransportOperations(transportOperation), new TransportTransaction(), new ContextBag());
                 counter.Mark();
-                return dispatcher.Dispatch(new TransportOperations(transportOperation), new TransportTransaction(),
-                    new ContextBag());
             });
         }
 
@@ -258,7 +259,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
                         {
                             Interlocked.Exchange(ref taskBarriers[nextTask], 1);
 
-                            nextTask = Math.Min(maxSenderCount - 1, nextTask + 1);
+                            nextTask = Math.Min(taskBarriers.Length, nextTask + 1);
                         }
                         else
                         {
@@ -280,7 +281,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
             }, ct);
 
 
-            var senders = Enumerable.Range(0, maxSenderCount).Select(async taskNo =>
+            var senders = Enumerable.Range(0, taskBarriers.Length - 1).Select(async taskNo =>
             {
                 var random = new Random(Environment.TickCount + taskNo);
                 while (ct.IsCancellationRequested == false)
@@ -313,58 +314,23 @@ namespace ServiceControl.LoadTests.AuditGenerator
 
         static async Task ConstantThroughputSend(string[] args, CancellationToken ct, IDispatchMessages dispatcher)
         {
-            var maxSenderCount = 20;
-
             var messagesPerSecond = int.Parse(args[0]);
             var destination = args.Length > 1 ? args[1] : DefaultDestination;
 
-            var semaphore = new SemaphoreSlim(0);
-
-            var delaySeconds = (double)1 / messagesPerSecond;
-            var delaySpan = TimeSpan.FromSeconds(delaySeconds);
-
-            var startTime = DateTime.UtcNow;
-            var generatedMessages = 0;
-
-            var monitor = Task.Run(async () =>
-            {
-                while (ct.IsCancellationRequested == false)
-                {
-                    var spin = new SpinWait();
-                    try
-                    {
-                        spin.SpinOnce();
-                        await Task.Delay(delaySpan, ct).ConfigureAwait(false);
-                        var elapsedTime = DateTime.UtcNow - startTime;
-                        var totalMessagesToBeGenerated = (int)(elapsedTime.TotalSeconds * messagesPerSecond);
-                        var deltaMessages = totalMessagesToBeGenerated - generatedMessages;
-                        if (deltaMessages > 0)
-                        {
-                            semaphore.Release(deltaMessages);
-                            generatedMessages += deltaMessages;
-                        }
-                    }
-                    catch
-                    {
-                        if (ct.IsCancellationRequested)
-                        {
-                            return;
-                        }
-                        throw;
-                    }
-                }
-            }, ct);
-
-
-            var senders = Enumerable.Range(0, maxSenderCount).Select(async taskNo =>
+            var senders = Enumerable.Range(0, messagesPerSecond).Select(async taskNo =>
             {
                 var random = new Random(Environment.TickCount + taskNo);
                 while (ct.IsCancellationRequested == false)
                 {
                     try
                     {
-                        await semaphore.WaitAsync(ct).ConfigureAwait(false);
-                        await SendAuditMessage(dispatcher, destination, random).ConfigureAwait(false);
+                        var sendAuditMessage = SendAuditMessage(dispatcher, destination, random);
+                        var delay = Task.Delay(1000, ct);
+                        var resultTask = await Task.WhenAny(sendAuditMessage, delay);
+                        if (resultTask == sendAuditMessage)
+                        {
+                            await delay;
+                        }
                     }
                     catch
                     {
@@ -377,7 +343,7 @@ namespace ServiceControl.LoadTests.AuditGenerator
                 }
             }).ToArray();
 
-            await Task.WhenAll(new List<Task>(senders) { monitor });
+            await Task.WhenAll(senders);
         }
 
         static async Task Run((string, Func<CancellationToken, string[], Task>)[] commands)
