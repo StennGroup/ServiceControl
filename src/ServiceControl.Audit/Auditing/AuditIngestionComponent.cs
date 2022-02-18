@@ -55,7 +55,7 @@ namespace ServiceControl.Audit.Auditing
             this.settings = settings;
             var errorHandlingPolicy = new AuditIngestionFaultPolicy(documentStore, loggingSettings, OnCriticalError);
             auditPersister = new AuditPersister(documentStore, bodyStorageEnricher, enrichers, settings.AuditRetentionPeriod, 
-                ingestedAuditMeter, ingestedSagaAuditMeter, auditBulkInsertDurationMeter, sagaAuditBulkInsertDurationMeter, bulkInsertCommitDurationMeter);
+                ingestedAuditMeter, ingestedSagaAuditMeter, auditBulkInsertDurationMeter, sagaAuditBulkInsertDurationMeter, bulkInsertCommitDurationMeter,settings);
 
             ingestor = new AuditIngestor(auditPersister, settings);
 

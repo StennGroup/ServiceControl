@@ -1,4 +1,6 @@
-﻿using Raven.Client.Documents.BulkInsert;
+﻿using Azure.Storage.Blobs;
+using Raven.Client.Documents.BulkInsert;
+using ServiceControl.Audit.Infrastructure.Settings;
 using ServiceControl.Infrastructure;
 
 namespace ServiceControl.Audit.Auditing
@@ -27,8 +29,9 @@ namespace ServiceControl.Audit.Auditing
     class AuditPersister
     {
         public AuditPersister(IDocumentStore store, BodyStorageFeature.BodyStorageEnricher bodyStorageEnricher, IEnrichImportedAuditMessages[] enrichers, TimeSpan auditRetentionPeriod,
-            Counter ingestedAuditMeter, Counter ingestedSagaAuditMeter, Meter auditBulkInsertDurationMeter, Meter sagaAuditBulkInsertDurationMeter, Meter bulkInsertCommitDurationMeter)
+            Counter ingestedAuditMeter, Counter ingestedSagaAuditMeter, Meter auditBulkInsertDurationMeter, Meter sagaAuditBulkInsertDurationMeter, Meter bulkInsertCommitDurationMeter, Settings settings)
         {
+            this.settings = settings;
             this.store = store;
             this.bodyStorageEnricher = bodyStorageEnricher;
             this.enrichers = enrichers;
@@ -43,6 +46,29 @@ namespace ServiceControl.Audit.Auditing
         public void Initialize(IMessageSession messageSession)
         {
             this.messageSession = messageSession;
+        }
+        
+        async ValueTask<BlobContainerClient> GetBlobContainer()
+        {
+            if (blobContainerClient == null)
+            {
+                blobContainerClient = BlobStorageClient.GetBlobContainerClient(settings.BlobStorageContainerName);
+                await blobContainerClient.CreateIfNotExistsAsync().ConfigureAwait(false);
+            }
+
+            return blobContainerClient;
+        }
+
+        BlobServiceClient BlobStorageClient =>
+            blobStorageClient ??
+            (blobStorageClient = new BlobServiceClient(settings.BlobStorageConnectionString));
+        
+        async ValueTask<BlobClient> GetBlobClientAsync(string bodyId)
+        {
+            var container = await GetBlobContainer().ConfigureAwait(false);
+            var blob = container.GetBlobClient(bodyId);
+
+            return blob;
         }
 
         public async Task<IReadOnlyList<MessageContext>> Persist(List<MessageContext> contexts)
@@ -92,17 +118,49 @@ namespace ServiceControl.Audit.Auditing
                             await bulkInsert.StoreAsync(processedMessage, GetExpirationMetadata())
                                 .ConfigureAwait(false);
 
-                            using (var stream = Memory.Manager.GetStream(Guid.NewGuid(), processedMessage.Id, context.Body, 0, context.Body.Length))
+                            if (settings.BlobStorageConnectionString == string.Empty)
                             {
-                                if (processedMessage.MessageMetadata.ContentType != null)
+                                using (var stream = Memory.Manager.GetStream(Guid.NewGuid(), processedMessage.Id, context.Body, 0, context.Body.Length))
                                 {
-                                    await bulkInsert.AttachmentsFor(processedMessage.Id)
-                                        .StoreAsync("body", stream, (string)processedMessage.MessageMetadata.ContentType).ConfigureAwait(false);
+                                    if (processedMessage.MessageMetadata.ContentType != null)
+                                    {
+                                        await bulkInsert.AttachmentsFor(processedMessage.Id)
+                                            .StoreAsync("body", stream, (string)processedMessage.MessageMetadata.ContentType).ConfigureAwait(false);
+                                    }
+                                    else
+                                    {
+                                        await bulkInsert.AttachmentsFor(processedMessage.Id).StoreAsync("body", stream)
+                                            .ConfigureAwait(false);
+                                    }
                                 }
-                                else
+                            }
+                            else
+                            {
+                                try
                                 {
-                                    await bulkInsert.AttachmentsFor(processedMessage.Id).StoreAsync("body", stream)
-                                        .ConfigureAwait(false);
+                                    var blob = await GetBlobClientAsync(processedMessage.Id).ConfigureAwait(false);
+
+                                    if (await blob.ExistsAsync().ConfigureAwait(false))
+                                    {
+                                        continue;
+                                    }
+
+                                    using (var stream = Memory.Manager.GetStream(Guid.NewGuid(), processedMessage.Id,
+                                               context.Body, 0, context.Body.Length))
+                                    {
+                                        await blob.UploadAsync(stream).ConfigureAwait(false);
+                                    }
+
+                                    await blob.SetMetadataAsync(new Dictionary<string, string>()
+                                    {
+                                        { "ContentType", processedMessage.MessageMetadata.ContentType },
+                                        { "BodySize", context.Body.Length.ToString()}
+                                    }).ConfigureAwait(false);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Warn("Unable to store the body in the blob storage.", ex);
+                                    throw;
                                 }
                             }
                         }
@@ -360,5 +418,8 @@ namespace ServiceControl.Audit.Auditing
         readonly Dictionary<string, DateTime> endpointInfoPersistTimes = new Dictionary<string, DateTime>();
         IMessageSession messageSession;
         static ILog Logger = LogManager.GetLogger<AuditPersister>();
+        private readonly Settings settings;
+        private BlobContainerClient blobContainerClient;
+        private BlobServiceClient blobStorageClient;
     }
 }

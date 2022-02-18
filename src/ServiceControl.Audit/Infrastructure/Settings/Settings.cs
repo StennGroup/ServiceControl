@@ -44,6 +44,8 @@
             DataSpaceRemainingThreshold = GetDataSpaceRemainingThreshold();
             ServiceControlQueueAddress = SettingsReader<string>.Read("ServiceControlQueueAddress");
             TimeToRestartAuditIngestionAfterFailure = GetTimeToRestartAuditIngestionAfterFailure();
+            BlobStorageContainerName = SettingsReader<string>.Read("BlobContainerName", "audit-bodies");
+            BlobStorageConnectionString = SettingsReader<string>.Read("BlobStorageConnectionString", string.Empty);
         }
 
         public Func<string, Dictionary<string, string>, byte[], Func<Task>, Task> OnMessage { get; set; } = (messageId, headers, body, next) => next();
@@ -125,6 +127,9 @@
         public int DataSpaceRemainingThreshold { get; set; }
 
         public string ServiceControlQueueAddress { get; set; }
+        
+        public string BlobStorageContainerName { get; set; }
+        public string BlobStorageConnectionString { get; set; }
 
         public TimeSpan TimeToRestartAuditIngestionAfterFailure { get; set; }
 
