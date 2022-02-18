@@ -145,13 +145,9 @@ namespace ServiceControl.Audit.Auditing
                                         continue;
                                     }
 
-                                    using (var stream = Memory.Manager.GetStream(Guid.NewGuid(), processedMessage.Id,
-                                               context.Body, 0, context.Body.Length))
-                                    {
-                                        await blob.UploadAsync(stream).ConfigureAwait(false);
-                                    }
+                                    await blob.UploadAsync(BinaryData.FromBytes(context.Body)).ConfigureAwait(false);
 
-                                    await blob.SetMetadataAsync(new Dictionary<string, string>()
+                                    await blob.SetMetadataAsync(new Dictionary<string, string>
                                     {
                                         { "ContentType", processedMessage.MessageMetadata.ContentType },
                                         { "BodySize", context.Body.Length.ToString()}
