@@ -112,6 +112,7 @@ namespace ServiceControl.Audit.Auditing
         async Task Loop()
         {
             var contexts = new List<MessageContext>(settings.MaximumConcurrencyLevel);
+            var tasks = new List<Task>(settings.MaximumConcurrencyLevel);
 
             while (await channel.Reader.WaitToReadAsync().ConfigureAwait(false))
             {
@@ -119,25 +120,31 @@ namespace ServiceControl.Audit.Auditing
                 try
                 {
 
-                    for (var attempts = 0; attempts <= 3; attempts++)
+                    
+                    while (channel.Reader.TryRead(out var context))
                     {
-                        // as long as there is something to read this will fetch up to MaximumConcurrency items
-                        while (channel.Reader.TryRead(out var context))
+                        contexts.Add(context);
+                        if (settings.NoBulkInserts)
                         {
-                            contexts.Add(context);
-                        }
-
-                        if (contexts.Count < settings.MaximumConcurrencyLevel)
-                        {
-                            await Task.Delay(5)
-                                .ConfigureAwait(false);
+                            tasks.Add(ingestor.Ingest(new List<MessageContext> { context }));
                         }
                     }
 
-                    batchSizeMeter.Mark(contexts.Count);
-                    using (batchDurationMeter.Measure())
+                    if (!settings.NoBulkInserts)
                     {
-                        await ingestor.Ingest(contexts).ConfigureAwait(false);
+                        batchSizeMeter.Mark(contexts.Count);
+                        using (batchDurationMeter.Measure())
+                        {
+                            await ingestor.Ingest(contexts).ConfigureAwait(false);
+                        }
+                    }
+                    else
+                    {
+                        batchSizeMeter.Mark(tasks.Count);
+                        using (batchDurationMeter.Measure())
+                        {
+                            await Task.WhenAll(tasks).ConfigureAwait(false);
+                        }
                     }
                 }
                 catch (Exception e) // show must go on
@@ -156,6 +163,7 @@ namespace ServiceControl.Audit.Auditing
                 finally
                 {
                     contexts.Clear();
+                    tasks.Clear();
                 }
             }
             // will fall out here when writer is completed

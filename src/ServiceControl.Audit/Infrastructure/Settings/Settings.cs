@@ -46,6 +46,7 @@
             TimeToRestartAuditIngestionAfterFailure = GetTimeToRestartAuditIngestionAfterFailure();
             BlobStorageContainerName = SettingsReader<string>.Read("BlobContainerName", "audit-bodies");
             BlobStorageConnectionString = SettingsReader<string>.Read("BlobStorageConnectionString", string.Empty);
+            NoBulkInserts = SettingsReader<bool>.Read("NoBulkInserts", false);
         }
 
         public Func<string, Dictionary<string, string>, byte[], Func<Task>, Task> OnMessage { get; set; } = (messageId, headers, body, next) => next();
@@ -57,6 +58,8 @@
         public bool DisableRavenDBPerformanceCounters { get; set; }
 
         public bool SkipQueueCreation { get; set; }
+        
+        public bool NoBulkInserts { get; set; }
 
         public string RootUrl
         {
