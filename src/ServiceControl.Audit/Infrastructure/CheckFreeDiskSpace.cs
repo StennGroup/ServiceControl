@@ -17,6 +17,11 @@
 
         public override Task<CheckResult> PerformCheck()
         {
+            if (dataPath == "external")
+            {
+                return CheckResult.Pass;
+            }
+            
             var dataPathRoot = Path.GetPathRoot(dataPath);
 
             if (dataPathRoot == null)
