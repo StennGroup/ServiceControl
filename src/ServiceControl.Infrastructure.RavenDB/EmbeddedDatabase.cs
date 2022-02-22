@@ -1,5 +1,9 @@
 using System.IO;
+using System.Threading;
 using NServiceBus.Logging;
+using Raven.Client.Documents.Operations;
+using Raven.Client.Exceptions;
+using Raven.Client.Exceptions.Database;
 using Sparrow.Json;
 
 namespace ServiceControl.Infrastructure.RavenDB
@@ -137,6 +141,24 @@ namespace ServiceControl.Infrastructure.RavenDB
                 }
 
                 store.Initialize();
+
+                try
+                {
+                    store.Maintenance.ForDatabase(config.Name).Send(new GetStatisticsOperation());
+                }
+                catch (DatabaseDoesNotExistException)
+                {
+                    try
+                    {
+                        await store.Maintenance.Server.SendAsync(new CreateDatabaseOperation(new DatabaseRecord(config.Name)))
+                            .ConfigureAwait(false);
+                    }
+                    catch (ConcurrencyException)
+                    {
+                        // The database was already created before calling CreateDatabaseOperation
+                    }
+
+                }
 
                 //TODO: figure out how to enable compression on a remote server
                 //if (config.EnableDocumentCompression)
