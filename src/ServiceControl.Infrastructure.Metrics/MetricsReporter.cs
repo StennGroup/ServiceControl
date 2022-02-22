@@ -44,8 +44,8 @@ namespace ServiceControl.Infrastructure
 
         public Task Stop()
         {
-            tokenSource.Cancel();
-            return task;
+            tokenSource?.Cancel();
+            return task ?? Task.CompletedTask;
         }
     }
 }
