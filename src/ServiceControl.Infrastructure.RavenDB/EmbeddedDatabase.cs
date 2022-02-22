@@ -4,6 +4,7 @@ using NServiceBus.Logging;
 using Raven.Client.Documents.Operations;
 using Raven.Client.Exceptions;
 using Raven.Client.Exceptions.Database;
+using Raven.Client.ServerWide.Operations.DocumentsCompression;
 using Sparrow.Json;
 
 namespace ServiceControl.Infrastructure.RavenDB
@@ -65,13 +66,13 @@ namespace ServiceControl.Infrastructure.RavenDB
                 MaxServerStartupTimeDuration = TimeSpan.FromDays(1) //TODO: RAVEN5 allow command line override?
             };
 
-            var useEmbedded = dbPath != "external";
+            var useEmbedded = !dbPath.StartsWith("http");
 
             if (useEmbedded)
             {
                 EmbeddedServer.Instance.StartServer(serverOptions);
             }
-            return new EmbeddedDatabase(expirationProcessTimerInSecond, databaseUrl, useEmbedded);
+            return new EmbeddedDatabase(expirationProcessTimerInSecond, useEmbedded ? databaseUrl : dbPath, useEmbedded);
         }
 
         public async Task<IDocumentStore> PrepareDatabase(DatabaseConfiguration config)
@@ -144,7 +145,8 @@ namespace ServiceControl.Infrastructure.RavenDB
 
                 try
                 {
-                    store.Maintenance.ForDatabase(config.Name).Send(new GetStatisticsOperation());
+                    await store.Maintenance.ForDatabase(config.Name).SendAsync(new GetStatisticsOperation())
+                        .ConfigureAwait(false);
                 }
                 catch (DatabaseDoesNotExistException)
                 {
@@ -160,14 +162,14 @@ namespace ServiceControl.Infrastructure.RavenDB
 
                 }
 
-                //TODO: figure out how to enable compression on a remote server
-                //if (config.EnableDocumentCompression)
-                //{
-                //    store.DatabaseRecord.DocumentsCompression = new DocumentsCompressionConfiguration(
-                //        false,
-                //        config.CollectionsToCompress.ToArray()
-                //    );
-                //}
+                if (config.EnableDocumentCompression)
+                {
+                    await store.Maintenance.ForDatabase(config.Name).SendAsync(
+                        new UpdateDocumentsCompressionConfigurationOperation(new DocumentsCompressionConfiguration(
+                            false,
+                            config.CollectionsToCompress.ToArray()
+                        ))).ConfigureAwait(false);
+                }
                 documentStore = store;
             }
 

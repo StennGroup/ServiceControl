@@ -17,7 +17,7 @@
 
         public override Task<CheckResult> PerformCheck()
         {
-            if (dataPath == "external")
+            if (dataPath.StartsWith("http"))
             {
                 return CheckResult.Pass;
             }
