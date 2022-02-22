@@ -6,8 +6,6 @@ using NServiceBus.Extensibility;
 using NServiceBus.Features;
 using NServiceBus.Routing;
 using NServiceBus.Transport;
-using Polly;
-using Polly.RateLimit;
 using ServiceControl.Infrastructure;
 
 namespace ServiceControl.LoadTests.AuditGenerator
