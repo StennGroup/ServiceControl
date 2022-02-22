@@ -22,11 +22,15 @@ namespace ServiceControl.Infrastructure.RavenDB
         static readonly ILog logger = LogManager.GetLogger<EmbeddedDatabase>();
 
         readonly int expirationProcessTimerInSeconds;
+        private readonly string databaseUrl;
+        private readonly bool useEmbeddedInstance;
         readonly Dictionary<string, IDocumentStore> preparedDocumentStores = new Dictionary<string, IDocumentStore>();
 
-        public EmbeddedDatabase(int expirationProcessTimerInSeconds)
+        public EmbeddedDatabase(int expirationProcessTimerInSeconds, string databaseUrl, bool useEmbeddedInstance)
         {
             this.expirationProcessTimerInSeconds = expirationProcessTimerInSeconds;
+            this.databaseUrl = databaseUrl;
+            this.useEmbeddedInstance = useEmbeddedInstance;
         }
 
 
@@ -57,8 +61,13 @@ namespace ServiceControl.Infrastructure.RavenDB
                 MaxServerStartupTimeDuration = TimeSpan.FromDays(1) //TODO: RAVEN5 allow command line override?
             };
 
-            EmbeddedServer.Instance.StartServer(serverOptions);
-            return new EmbeddedDatabase(expirationProcessTimerInSecond);
+            var useEmbedded = dbPath != "external";
+
+            if (useEmbedded)
+            {
+                EmbeddedServer.Instance.StartServer(serverOptions);
+            }
+            return new EmbeddedDatabase(expirationProcessTimerInSecond, databaseUrl, useEmbedded);
         }
 
         public async Task<IDocumentStore> PrepareDatabase(DatabaseConfiguration config)
@@ -85,29 +94,60 @@ namespace ServiceControl.Infrastructure.RavenDB
 
         async Task<IDocumentStore> InitializeDatabase(DatabaseConfiguration config)
         {
-            var dbOptions = new DatabaseOptions(config.Name)
+            IDocumentStore documentStore;
+            if (useEmbeddedInstance) 
             {
-                Conventions = new DocumentConventions
+                var dbOptions = new DatabaseOptions(config.Name)
+                {
+                    Conventions = new DocumentConventions
+                    {
+                        SaveEnumsAsIntegers = true
+                    }
+                };
+
+                if (config.FindClrType != null)
+                {
+                    dbOptions.Conventions.FindClrType += config.FindClrType;
+                }
+
+                if (config.EnableDocumentCompression)
+                {
+                    dbOptions.DatabaseRecord.DocumentsCompression = new DocumentsCompressionConfiguration(
+                        false,
+                        config.CollectionsToCompress.ToArray()
+                    );
+                }
+
+                documentStore =
+                    await EmbeddedServer.Instance.GetDocumentStoreAsync(dbOptions).ConfigureAwait(false);
+            }
+            else 
+            {
+                var store = new DocumentStore();
+                store.Database = config.Name;
+                store.Urls = new[] { databaseUrl };
+                store.Conventions = new DocumentConventions
                 {
                     SaveEnumsAsIntegers = true
+                };
+
+                if (config.FindClrType != null)
+                {
+                    store.Conventions.FindClrType += config.FindClrType;
                 }
-            };
 
-            if (config.FindClrType != null)
-            {
-                dbOptions.Conventions.FindClrType += config.FindClrType;
+                store.Initialize();
+
+                //TODO: figure out how to enable compression on a remote server
+                //if (config.EnableDocumentCompression)
+                //{
+                //    store.DatabaseRecord.DocumentsCompression = new DocumentsCompressionConfiguration(
+                //        false,
+                //        config.CollectionsToCompress.ToArray()
+                //    );
+                //}
+                documentStore = store;
             }
-
-            if (config.EnableDocumentCompression)
-            {
-                dbOptions.DatabaseRecord.DocumentsCompression  = new DocumentsCompressionConfiguration(
-                    false,
-                    config.CollectionsToCompress.ToArray()
-                );
-            }
-
-            var documentStore =
-                await EmbeddedServer.Instance.GetDocumentStoreAsync(dbOptions).ConfigureAwait(false);
 
             foreach (var indexAssembly in config.IndexAssemblies)
             {
@@ -134,7 +174,11 @@ namespace ServiceControl.Infrastructure.RavenDB
             {
                 store.Dispose();
             }
-            EmbeddedServer.Instance.Dispose();
+
+            if (useEmbeddedInstance)
+            {
+                EmbeddedServer.Instance.Dispose();
+            }
         }
     }
 }
