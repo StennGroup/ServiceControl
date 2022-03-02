@@ -33,12 +33,16 @@
             Cancel = Command.Create(async () =>
             {
                 Result = null;
+#pragma warning disable IDE0004 // Remove Unnecessary Cast
                 await ((IDeactivate)this).DeactivateAsync(true);
+#pragma warning restore IDE0004 // Remove Unnecessary Cast
             });
             Save = Command.Create(async () =>
             {
                 Result = true;
+#pragma warning disable IDE0004 // Remove Unnecessary Cast
                 await ((IDeactivate)this).DeactivateAsync(true);
+#pragma warning restore IDE0004 // Remove Unnecessary Cast
             });
         }
 

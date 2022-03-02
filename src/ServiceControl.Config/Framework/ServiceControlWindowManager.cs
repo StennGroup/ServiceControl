@@ -76,7 +76,9 @@
             var previousContext = shell.ActiveContext;
             shell.Overlay = screen;
             shell.ActiveContext = context;
+#pragma warning disable IDE0004 // Remove Unnecessary Cast
             await ((IActivate)screen).ActivateAsync();
+#pragma warning restore IDE0004 // Remove Unnecessary Cast
             screen.RunModal();
             shell.Overlay = null;
             shell.ActiveContext = previousContext;

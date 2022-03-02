@@ -16,12 +16,16 @@
             Ok = Command.Create(async () =>
             {
                 Result = true;
+#pragma warning disable IDE0004 // Remove Unnecessary Cast
                 await ((IDeactivate)this).DeactivateAsync(true);
+#pragma warning restore IDE0004 // Remove Unnecessary Cast
             });
             Cancel = Command.Create(async () =>
             {
                 Result = false;
+#pragma warning disable IDE0004 // Remove Unnecessary Cast
                 await ((IDeactivate)this).DeactivateAsync(true);
+#pragma warning restore IDE0004 // Remove Unnecessary Cast
             });
             HideCancel = hideCancel;
         }
