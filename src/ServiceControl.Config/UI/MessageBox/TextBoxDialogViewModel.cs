@@ -25,12 +25,12 @@
             Cancel = Command.Create(async () =>
             {
                 Result = null;
-                await this.DeactivateAsync(true);
+                await ((IDeactivate)this).DeactivateAsync(true);
             });
             Save = Command.Create(async () =>
             {
                 Result = true;
-                await this.DeactivateAsync(true);
+                await ((IDeactivate)this).DeactivateAsync(true);
             }, () => Validator.Validate(new ValidationContext<TextBoxDialogViewModel>(this)).IsValid);
         }
 
