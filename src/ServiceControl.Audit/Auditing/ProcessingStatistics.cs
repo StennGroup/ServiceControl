@@ -23,19 +23,13 @@
                 var headers = context.Headers;
                 var metadata = context.Metadata;
                 var processingEnded = DateTime.MinValue;
-                var startTime = DateTime.MinValue;
+                var timeSent = DateTime.MinValue;
                 var processingStarted = DateTime.MinValue;
 
                 if (headers.TryGetValue(Headers.TimeSent, out var timeSentValue))
                 {
-                    startTime = DateTimeExtensions.ToUtcDateTime(timeSentValue);
-                    metadata.Add("TimeSent", startTime);
-                }
-
-                if (headers.TryGetValue(Headers.DeliverAt, out var deliverAtValue))
-                {
-                    startTime = DateTimeExtensions.ToUtcDateTime(deliverAtValue);
-                    metadata.Add("DeliverAt", startTime);
+                    timeSent = DateTimeExtensions.ToUtcDateTime(timeSentValue);
+                    metadata.Add("TimeSent", timeSent);
                 }
 
                 if (headers.TryGetValue(Headers.ProcessingStarted, out var processingStartedValue))
@@ -50,9 +44,9 @@
 
                 var criticalTime = TimeSpan.Zero;
 
-                if (processingEnded != DateTime.MinValue && startTime != DateTime.MinValue)
+                if (processingEnded != DateTime.MinValue && timeSent != DateTime.MinValue)
                 {
-                    criticalTime = processingEnded - startTime;
+                    criticalTime = processingEnded - timeSent;
                 }
 
                 metadata.Add("CriticalTime", criticalTime);
@@ -68,9 +62,9 @@
 
                 var deliveryTime = TimeSpan.Zero;
 
-                if (processingStarted != DateTime.MinValue && startTime != DateTime.MinValue)
+                if (processingStarted != DateTime.MinValue && timeSent != DateTime.MinValue)
                 {
-                    deliveryTime = processingStarted - startTime;
+                    deliveryTime = processingStarted - timeSent;
                 }
 
                 metadata.Add("DeliveryTime", deliveryTime);
