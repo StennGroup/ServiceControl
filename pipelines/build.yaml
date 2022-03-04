@@ -22,7 +22,7 @@ steps:
         msbuildArchitecture: x64
     - task: Docker@2
       inputs:
-        containerRegistry: 'Docker Registry (STENN)'
+        containerRegistry: 'daad1d05-17d9-4c80-91af-18c121916054'
         repository: 'particular/servicecontrol.azureservicebus-windows'
         command: 'buildAndPush'
         Dockerfile: 'servicecontrol.azureservicebus-windows.dockerfile'
