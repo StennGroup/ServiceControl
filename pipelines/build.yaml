@@ -20,3 +20,10 @@ steps:
         configuration: Release
         maximumCpuCount: true
         msbuildArchitecture: x64
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'Docker Registry (STENN)'
+        repository: 'particular/servicecontrol.azureservicebus-windows'
+        command: 'buildAndPush'
+        Dockerfile: 'servicecontrol.azureservicebus-windows.dockerfile'
+        tags: 'latest'
