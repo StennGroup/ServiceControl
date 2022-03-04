@@ -9,6 +9,8 @@ steps:
       inputs:
         solution: src\ServiceControl.sln
         configurationToPack: Release
+        nugetConfigPath: nuget.config
+        feedsToUse: config
     - task: VSBuild@1
       displayName: Build solution Operations.sln
       inputs:
