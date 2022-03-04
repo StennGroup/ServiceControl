@@ -28,3 +28,49 @@ steps:
         Dockerfile: 'src\docker\servicecontrol.azureservicebus-windows.dockerfile'
         buildContext: 'src'
         tags: 'latest'
+
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'daad1d05-17d9-4c80-91af-18c121916054'
+        repository: 'particular/servicecontrol.azureservicebus.init-windows'
+        command: 'buildAndPush'
+        Dockerfile: 'src\docker\servicecontrol.azureservicebus.init-windows.dockerfile'
+        buildContext: 'src'
+        tags: 'latest'
+
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'daad1d05-17d9-4c80-91af-18c121916054'
+        repository: 'particular/servicecontrol.azureservicebus.audit-windows'
+        command: 'buildAndPush'
+        Dockerfile: 'src\docker\servicecontrol.azureservicebus.audit-windows.dockerfile'
+        buildContext: 'src'
+        tags: 'latest'
+
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'daad1d05-17d9-4c80-91af-18c121916054'
+        repository: 'particular/servicecontrol.azureservicebus.audit.init-windows'
+        command: 'buildAndPush'
+        Dockerfile: 'src\docker\servicecontrol.azureservicebus.audit.init-windows.dockerfile'
+        buildContext: 'src'
+        tags: 'latest'
+
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'daad1d05-17d9-4c80-91af-18c121916054'
+        repository: 'particular/servicecontrol.azureservicebus.monitoring-windows'
+        command: 'buildAndPush'
+        Dockerfile: 'src\docker\servicecontrol.azureservicebus.monitoring-windows.dockerfile'
+        buildContext: 'src'
+        tags: 'latest'
+
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'daad1d05-17d9-4c80-91af-18c121916054'
+        repository: 'particular/servicecontrol.azureservicebus.monitoring.init-windows'
+        command: 'buildAndPush'
+        Dockerfile: 'src\docker\servicecontrol.azureservicebus.monitoring.init-windows.dockerfile'
+        buildContext: 'src'
+        tags: 'latest'
+    
