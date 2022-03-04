@@ -1,0 +1,24 @@
+pr: none
+
+pool:
+    vmImage: 'windows-latest'
+
+steps:
+    - task: NuGetToolInstaller@1
+      displayName: Use NuGet 5.8.0
+      inputs:
+        versionSpec: 5.8.0
+    - task: NuGetCommand@2
+      displayName: NuGet restore
+      inputs:
+        solution: src\ServiceControl.sln
+        configurationToPack: Release
+    - task: VSBuild@1
+      displayName: Build solution Operations.sln
+      inputs:
+        solution: src\ServiceControl.sln
+        vsVersion: 16.0
+        platform: any cpu
+        configuration: Release
+        maximumCpuCount: true
+        msbuildArchitecture: x64
