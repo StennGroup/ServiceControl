@@ -10,13 +10,6 @@ ENV "SERVICECONTROL_RUNNING_IN_DOCKER"="true"
 ENV "ServiceControl.Audit/TransportType"="ServiceControl.Transports.ASBS.ASBSTransportCustomization, ServiceControl.Transports.ASBS"
 ENV "ServiceControl.Audit/Hostname"="*"
 
-ENV "ServiceControl.Audit/DBPath"="C:\\Data\\DB\\"
-ENV "ServiceControl.Audit/LogPath"="C:\\Data\\Logs\\"
-
-# Defaults
-ENV "ServiceControl.Audit/ForwardAuditMessages"="False"
-ENV "ServiceControl.Audit/AuditRetentionPeriod"="365"
-
 VOLUME [ "C:/Data" ]
 
 ENTRYPOINT ["ServiceControl.Audit.exe", "--portable", "--setup"]

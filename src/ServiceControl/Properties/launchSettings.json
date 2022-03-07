@@ -1,0 +1,19 @@
+{
+  "profiles": {
+    "ServiceControl": {
+      "commandName": "Project",
+      "commandLineArgs": "--portable --setup",
+      "environmentVariables": {
+        "ServiceControl_ConnectionString": "Endpoint=sb://environment-risks4530.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=/0QkaI77lFI/NxjLOoJDy6IeUT5DJSGOFLBEFYy9Hd4=",
+        "ServiceControl_LicenseText": "<?xml version=\"1.0\" encoding=\"utf-8\"?><license type=\"Production\" Quantity=\"14\" Tier=\"Professional\" Edition=\"Professional\" Applications=\"All\" RenewalType=\"Subscription\" expiration=\"2022-12-12\" id=\"c4a18f6c-586a-4994-8ede-3306ecafcda9\">  <name>Stenn International inc</name>  <Signature xmlns=\"http://www.w3.org/2000/09/xmldsig#\">    <SignedInfo>      <CanonicalizationMethod Algorithm=\"http://www.w3.org/TR/2001/REC-xml-c14n-20010315\" />      <SignatureMethod Algorithm=\"http://www.w3.org/2000/09/xmldsig#rsa-sha1\" />      <Reference URI=\"\">        <Transforms>          <Transform Algorithm=\"http://www.w3.org/2000/09/xmldsig#enveloped-signature\" />        </Transforms>        <DigestMethod Algorithm=\"http://www.w3.org/2000/09/xmldsig#sha1\" />        <DigestValue>+W2y2wHC5uLys50RxxV0s3xT6EA=</DigestValue>      </Reference>    </SignedInfo>    <SignatureValue>Ab12Kuzst+HHesObXyGq2pGd5GNweHj0R0zhdh1bk31AWlHWs8p0b2ePPK4sP8KZ85jYcJ89+tU2x/L1PV10WIYTm4430NXljZPRTdkhkLJSMY3HckagfsJ1e5Qky1EdY0bh9IareJjwgo0bbkOWDI4bMBzxAuCdrm8svNu4rp4=</SignatureValue>  </Signature></license>",
+        "SERVICECONTROL_RUNNING_IN_DOCKER": "true",
+        "ServiceControl/TransportType": "ServiceControl.Transports.ASBS.ASBSTransportCustomization, ServiceControl.Transports.ASBS",
+        "ServiceControl/ErrorRetentionPeriod": "15",
+        "ServiceControl/ForwardErrorMessages": "False",
+        "ServiceControl/Hostname": "*",
+        "ServiceControl/DBPath": "C:\\\\Data\\\\DB\\\\",
+        "ServiceControl/LogPath": "C:\\\\Data\\\\Logs\\\\"
+      }
+    }
+  }
+}

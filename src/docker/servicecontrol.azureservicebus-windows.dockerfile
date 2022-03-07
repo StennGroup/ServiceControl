@@ -10,13 +10,6 @@ ENV "SERVICECONTROL_RUNNING_IN_DOCKER"="true"
 ENV "ServiceControl/TransportType"="ServiceControl.Transports.ASBS.ASBSTransportCustomization, ServiceControl.Transports.ASBS"
 ENV "ServiceControl/Hostname"="*"
 
-ENV "ServiceControl/DBPath"="C:\\Data\\DB\\"
-ENV "ServiceControl/LogPath"="C:\\Data\\Logs\\"
-
-# Defaults
-ENV "ServiceControl/ForwardErrorMessages"="False"
-ENV "ServiceControl/ErrorRetentionPeriod"="15"
-
 EXPOSE 33333
 EXPOSE 33334
 
