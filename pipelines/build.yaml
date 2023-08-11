@@ -16,7 +16,7 @@ steps:
       displayName: Build solution Operations.sln
       inputs:
         solution: src\ServiceControl.sln
-        vsVersion: 17.0
+        vsVersion: 16.0
         platform: any cpu
         configuration: Release
         maximumCpuCount: true
