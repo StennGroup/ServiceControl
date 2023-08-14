@@ -28,7 +28,6 @@ steps:
         command: 'buildAndPush'
         Dockerfile: 'src\docker\servicecontrol.azureservicebus-windows.dockerfile'
         buildContext: 'src'
-        tags: '2022'
 
     - task: Docker@2
       inputs:
@@ -37,7 +36,6 @@ steps:
         command: 'buildAndPush'
         Dockerfile: 'src\docker\servicecontrol.azureservicebus.init-windows.dockerfile'
         buildContext: 'src'
-        tags: '2022'
 
     - task: Docker@2
       inputs:
@@ -46,7 +44,6 @@ steps:
         command: 'buildAndPush'
         Dockerfile: 'src\docker\servicecontrol.azureservicebus.audit-windows.dockerfile'
         buildContext: 'src'
-        tags: '2022'
 
     - task: Docker@2
       inputs:
@@ -55,7 +52,6 @@ steps:
         command: 'buildAndPush'
         Dockerfile: 'src\docker\servicecontrol.azureservicebus.audit.init-windows.dockerfile'
         buildContext: 'src'
-        tags: '2022'
 
     - task: Docker@2
       inputs:
@@ -64,7 +60,6 @@ steps:
         command: 'buildAndPush'
         Dockerfile: 'src\docker\servicecontrol.azureservicebus.monitoring-windows.dockerfile'
         buildContext: 'src'
-        tags: '2022'
 
     - task: Docker@2
       inputs:
@@ -73,5 +68,5 @@ steps:
         command: 'buildAndPush'
         Dockerfile: 'src\docker\servicecontrol.azureservicebus.monitoring.init-windows.dockerfile'
         buildContext: 'src'
-        tags: '2022'
+
     
